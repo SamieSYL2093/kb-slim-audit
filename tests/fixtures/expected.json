@@ -1,0 +1,16 @@
+{
+  "_说明": "回归断言表：expect=样本里必须被报出的问题；reject=不得误报的；min_center_keywords=中心文档至少提取出的关键词数（低于则 S3 可能静默失效）。新增案例=放样本文件+在此加一行，不改自检脚本。",
+  "min_center_keywords": 2,
+  "expect": [
+    { "category": "头注堆叠", "location_contains": "multi-line-header.md" },
+    { "category": "头注堆叠", "location_contains": "single-line-header.md" },
+    { "category": "孤儿文件", "location_contains": "hub.md" },
+    { "category": "疑似复述", "location_contains": "copycat.md" },
+    { "category": "台账流水", "location_contains": "台账-流水.md" }
+  ],
+  "reject": [
+    { "category": "孤儿文件", "location_contains": "note-alpha.md" },
+    { "category": "孤儿文件", "location_contains": "note-beta.md" },
+    { "category": "台账流水", "location_contains": "台账-干净.md" }
+  ]
+}
