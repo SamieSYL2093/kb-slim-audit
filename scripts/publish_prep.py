@@ -28,6 +28,10 @@ if hasattr(sys.stdout, "reconfigure"):
 # ── 白名单：只有这些进发布面 ──────────────────────────────
 WHITELIST_FILES = ["SKILL.md", "README.md", "LICENSE", "CHANGELOG.md"]
 WHITELIST_DIRS = ["scripts", "references", "tests"]
+# 目录进了白名单，但其中仅供本仓内部使用的工具不发布（对使用者无意义）
+EXCLUDE_FILES = {
+    "api_push.py",  # 把发布面推到 GitHub 的上传工具，只服务于本仓发布流程
+}
 
 OUT_DIR = "publish"
 CONFIG_NAME = ".sensitive-patterns.json"
@@ -38,6 +42,10 @@ GENERIC_REPLACE = [
     (re.compile(r"(?<![a-zA-Z/])[A-Za-z]:[\\/](?!//)"), "your-dir/"),
     (re.compile(r"\b[PGXR]-\d{2,4}\b"), "X-NN"),
     (re.compile(r"\bG\d{3}\b"), "G-NNN"),
+    # 规范编号段（1-XX/2-XX/3-XX 系）：08-29 根治——1.5.4 已发布面曾漏过下划线连写的
+    # 编号文件名（复检全绿），姊妹技能仓先行修复后回灌本机制源。lookahead 兼容下划线形态；
+    # 8/9 开头的日期类编号（如 8-01）刻意不收，防误伤。替换目标不含数字，不会被二次匹配。
+    (re.compile(r"\b[123]-\d{2}(?=\b|_)"), "X-NN"),
 ]
 # 注意：替换目标不能写成"字母-数字"样式，否则会被自己的规则二次匹配（本文件注释里的举例就被换过一次）
 
@@ -70,7 +78,7 @@ def check_patterns(replace: dict, names: dict) -> dict:
     """把 _replace 与分组词表合成检查用正则表。"""
     rules = {
         "本机绝对路径": GENERIC_REPLACE[0][0],
-        "内部编号": re.compile(r"\b[PGXR]-\d{2,4}\b|\bG\d{3}\b|P\d{2}(?=[-\u4e00-\u9fa5])"),
+        "内部编号": re.compile(r"\b[PGXR]-\d{2,4}\b|\bG\d{3}\b|P\d{2}(?=[-\u4e00-\u9fa5])|\b[123]-\d{2}(?=\b|_)"),
     }
     for word in replace:
         rules.setdefault("私有词", [])
@@ -124,7 +132,7 @@ def walk_files(base: str, rels):
                 if "__pycache__" in root:
                     continue
                 for n in names:
-                    if n.endswith((".pyc", ".bak")):
+                    if n.endswith((".pyc", ".bak")) or n in EXCLUDE_FILES:
                         continue
                     full = os.path.join(root, n)
                     out.append((full, os.path.relpath(full, base)))

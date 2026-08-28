@@ -3,7 +3,7 @@ slug: kb-slim-audit
 name: kb-slim-audit
 displayName: 知识库瘦身审查
 description: 知识库/文档仓瘦身审查。用 8 条核心判定式 + 13 类补漏判定式审查 Markdown 文档，输出「删 / 并 / 压 / 移 / 指针化 / 冻结」可执行清单，并标注查过确认不动的文件。内置三层审查节奏（L1 机检 / L2 语义 / L3 体系）、检出与裁决分离、防呆清单与真实反面案例库。当用户要求审查文档冗余、精简知识库、瘦身 MD 仓、清理重复文档、判断文档能否删除或合并时使用。
-version: 1.5.4
+version: 1.5.5
 summary: 文档仓越用越胖？把本 skill 发给任意桌面端 AI，它按 21 条判定式把你的 Markdown 知识库过一遍，输出「删/并/压/移/指针化/冻结」可执行清单——查过不动的也标注，AI 只出清单、人拍板。附零依赖机检脚本 S1-S10（只报不修）与回归自检语料（防真空绿）。MIT，下载即用。
 license: MIT
 metadata:
@@ -189,7 +189,7 @@ metadata:
 ```bash
 python scripts/kb_slim_scan.py ./docs            # 扫指定目录
 python scripts/kb_slim_scan.py ./docs --top 15   # 调大显示条数
-python scripts/kb_slim_scan.py ./docs --center 1-01_档案.md   # 指定复述检测基准
+python scripts/kb_slim_scan.py ./docs --center X-NN_档案.md   # 指定复述检测基准
 python scripts/kb_slim_scan.py ./docs --json     # JSON 输出（含 rule/confidence，对齐 §十四 findings 契约）
 ```
 

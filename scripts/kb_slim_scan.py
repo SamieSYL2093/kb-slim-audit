@@ -10,7 +10,7 @@ kb_slim_scan.py — 知识库瘦身扫描（kb-slim-audit 配套工具）
     python kb_slim_scan.py [目录] [选项]
     python kb_slim_scan.py                 # 扫当前目录
     python kb_slim_scan.py ./docs --top 15 # 指定目录，大文件 Top 15
-    python kb_slim_scan.py ./docs --center 1-01_档案.md   # 指定中心文档（复述检测基准）
+    python kb_slim_scan.py ./docs --center X-NN_档案.md   # 指定中心文档（复述检测基准）
     python kb_slim_scan.py ./docs --json                  # JSON 输出，供其他工具消费
 
 规则一览：
