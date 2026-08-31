@@ -24,6 +24,9 @@ kb_slim_scan.py — 知识库瘦身扫描（kb-slim-audit 配套工具）
   S8 孤儿文件       未被任何 md 引用且不在白名单
   S9 空占位/久挂    文件几乎无内容，或含长期未兑现的待办
   S10 台账流水      台账类文件里日期开头行 ≥10 且占比 >30% → 流水回项目仓
+  S11 层级超标      有声明按声明、有引用按全局默认（X-NN：层级 <3）→ 超标即报；无标准不判（归 S13）
+  S12 命名不可扩展  目录名是 before/after、新旧、final、备份 式——撑不过第三轮 → 改轮次/日期/版本号
+  S13 缺标准        第一层目录及其上级都没声明文件夹标准 = 系统缺失（X-NN 铁律①的机检）→ 先补标准
 
 findings 结构（对齐 SKILL.md §十四 契约）：
   (规则ID, 严重度, 置信度, 类别, 位置, 证据, 建议动作)
@@ -56,6 +59,70 @@ VAGUE_DIRS = {
     "工具", "资料", "案例", "其他", "其他资料", "文件", "文档", "素材", "资源",
     "tools", "docs", "files", "misc", "other", "temp", "tmp", "stuff",
 }
+# X-NN 铁律「层级 <3」的全局默认：目录最多 2 层（目录声明可覆盖，见 kbstd）
+DEFAULT_MAX_DEPTH = 2
+# 文件夹标准声明：目录在自己 AGENTS.md / README.md 里写一行机器可读声明，例如
+#   <!-- kbstd: max-depth=none reason=记忆快照原样保留 -->
+#   <!-- kbstd: max-depth=4 reason=代码工程 -->
+KBSTD_RE = re.compile(r"<!--\s*kbstd:\s*([^>]*?)-->", re.I | re.S)
+
+
+def dir_declared(d: Path):
+    """读目录自己的文件夹标准声明。
+
+    返回 ('kbstd', limit|None, reason)：本目录有显式声明（limit=None 表示不限深度）；
+         ('inherit',)：引用了 X-NN（按全局默认）；
+         None：全链无标准（系统缺失）。
+    """
+    for fn in ("AGENTS.md", "README.md"):
+        f = d / fn
+        if not f.is_file():
+            continue
+        t = read(f)
+        m = KBSTD_RE.search(t)
+        if m:
+            kv = dict(re.findall(r"([\w-]+)\s*=\s*([^\s]+)", m.group(1)))
+            md = kv.get("max-depth", "").lower()
+            limit = None if md in ("none", "") else (int(md) if md.isdigit() else None)
+            return ("kbstd", limit, kv.get("reason", ""))
+        if "X-NN" in t or "文件夹基本规范" in t:
+            return ("inherit",)
+    return None
+# 不可扩展目录名：before/after、新旧、final 式命名撑不过第三轮（起名问一句「第三轮怎么办」）
+NONEXT_DIRS = {
+    "before", "after", "old", "new", "final", "backup",
+    "新旧", "旧版", "新版", "最终", "最终版", "备份",
+}
+# 代码工程豁免（S11）：代码项目的目录深度由框架生态决定，不受 X-NN「层级 <3」约束。
+# 识别代码项目根（满足任一）：依赖/构建清单文件、.sln/.csproj 类工程文件、
+# 自带 venv、或同目录 ≥3 个同源代码文件（≥3 是为了不误伤"只带一个脚本"的文档仓）。
+CODE_MARKERS = {
+    "package.json", "pyproject.toml", "requirements.txt", "pipfile",
+    "cargo.toml", "go.mod", "pom.xml", "build.gradle", "composer.json", "gemfile",
+}
+CODE_EXTS = {".py", ".js", ".ts", ".java", ".cs", ".go", ".rs", ".cpp", ".c"}
+
+
+def is_code_root(d: Path) -> bool:
+    try:
+        names = {n.lower() for n in os.listdir(d)}
+    except OSError:
+        return False
+    if names & CODE_MARKERS:
+        return True
+    if any(n.endswith((".sln", ".csproj", ".vcxproj")) for n in names):
+        return True
+    if "venv" in names or ".venv" in names:
+        return True
+    return sum(1 for n in names if Path(n).suffix.lower() in CODE_EXTS) >= 3
+
+
+def _is_under(p: Path, ancestor: Path) -> bool:
+    try:
+        p.resolve().relative_to(ancestor)
+        return True
+    except ValueError:
+        return False
 # 判定式 11：头注里的历史堆叠
 UPDATE_LINE = re.compile(r"^\s*>\s*(更新|最后更新|Updated|历史|变更)\s*[:：]")
 # 判定式 18：久挂待办
@@ -250,13 +317,52 @@ def scan(root: Path, center: Path | None, big_threshold: int, top: int):
                                  f"同目录 {len(group)} 个同名前缀文件（行数 {sizes}）",
                                  "diff 确认：旧版残留则归档，职责不同则保留并改名区分"))
 
-    # S6 命名笼统
+    # S6 命名笼统 / S11 层级超标 / S12 命名不可扩展 / S13 缺标准
+    # 判断链（用户 08-29 定）：先问「有没有标准」——有声明按声明查；无声明但上级引用了
+    # X-NN 按全局默认查；全链都没有 = 系统缺失（S13），缺失本身先报，**无标准不判违规**。
+    code_roots = {root.resolve()} if is_code_root(root) else set()
+    eff = {}  # resolved 目录 -> 生效标准（('kbstd', limit|None, reason) / ('inherit',) / None）
     for dirpath, dirnames, _ in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
-        for d in dirnames:
+        pdir = Path(dirpath)
+        own = dir_declared(pdir)
+        parent_eff = None if pdir == root else eff.get(pdir.resolve().parent)
+        eff[pdir.resolve()] = own or parent_eff
+        in_code = any(_is_under(pdir, cr) for cr in code_roots)
+        base_depth = len(pdir.relative_to(root).parts)
+        for d in list(dirnames):
+            sub = pdir / d
+            rel_d = sub.relative_to(root).as_posix()
+            sub_eff = dir_declared(sub) or eff[pdir.resolve()]
+            if is_code_root(sub):
+                code_roots.add(sub.resolve())
+            # S13 缺标准（只查第一层：X-NN 铁律①「第一层必有规范」的机检）
+            if base_depth == 0 and sub_eff is None:
+                hint = ("；检测到代码工程特征（venv/依赖清单/源码），"
+                        "建议声明 max-depth=none reason=代码工程") if is_code_root(sub) else ""
+                findings.append(("S13", "M", "高", "缺标准", rel_d,
+                                 "本目录及上级均未声明文件夹标准——系统缺失，无标准则无法判合规" + hint,
+                                 "在其 AGENTS.md/README.md 加一行 <!-- kbstd: max-depth=N|none reason=… -->，或引用总仓 X-NN"))
+            # S11 层级超标：有标准才判；标准来源写进证据。只报每支分支第一个超标目录，不级联刷屏
+            limit, src = None, ""
+            if sub_eff and sub_eff[0] == "kbstd":
+                limit, src = sub_eff[1], "本目录声明"
+            elif sub_eff:
+                limit, src = DEFAULT_MAX_DEPTH, "全局默认（X-NN 层级 <3）"
+            if limit is not None and base_depth + 1 > limit:
+                code_note = "；检测到代码工程特征——若属框架结构，请声明 kbstd 豁免而非默默超标" if in_code else ""
+                findings.append(("S11", "L", "高", "层级超标", rel_d,
+                                 f"目录第 {base_depth + 1} 层，超过{src}标准 max-depth={limit}{code_note}",
+                                 "压平或归并；有意保留的（快照/工程结构）在最近目录声明 kbstd，而不是默默超标"))
+                dirnames.remove(d)
+                continue
             if d in VAGUE_DIRS:
                 findings.append(("S6", "M", "高", "命名笼统", d, "泛词目录名会逼出下一层套娃",
                                  "改成具体名字，或解散该层"))
+            if d.lower() in NONEXT_DIRS or d in NONEXT_DIRS:
+                findings.append(("S12", "M", "中", "命名不可扩展", rel_d,
+                                 f"「{d}」式命名撑不过第三轮（再来一轮叫什么？）",
+                                 "改可扩展命名：轮次 r0/r1…、日期、版本号"))
 
     return mds, findings, kws, center_doc
 

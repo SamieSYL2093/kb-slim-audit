@@ -36,6 +36,21 @@ EXCLUDE_FILES = {
 OUT_DIR = "publish"
 CONFIG_NAME = ".sensitive-patterns.json"
 
+# ── 第二道闸：形态特征扫描（不依赖词表）────────────────────
+# 为什么需要它：替换与复检共用同一张词表时，词表里没有的词**两边同时瞎**——
+# 复检报"0 残留"不可信 → 没人敢真信机制 → 每次改动都人工再分析一遍（机制形同虚设）。
+# 特征扫描按"形态"找可疑项，与词表互补：词表漏掉的，形态兜住。
+SUSPECT_PATTERNS = {
+    "大写标识符": re.compile(r"\b[A-Za-z]*[A-Z]{2,}[A-Za-z]*\d{2,}\b"),
+    "AI代号词缀": re.compile(r"[\u4e00-\u9fa5]{1,4}(?:龙虾|企鹅)"),
+    "邮箱": re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+"),
+    "单字母编号": re.compile(r"\b[A-Z]-\d{2,4}\b"),
+}
+# 特征扫描会命中的**正常内容**（作者署名、产品名），列出来免得每次重复看
+SUSPECT_ALLOW = {
+    "SamieSYL2093",   # 作者公开署名：LICENSE 版权行 / README 的 MIT 行 / SKILL.md author
+}
+
 # ── 通用脱敏规则（任何组织都适用，不是私有事实）────────────
 # 注意：规则表本身不要字面写出敏感词，否则规则表自己先中枪（见 SKILL.md 案例库）
 GENERIC_REPLACE = [
@@ -161,6 +176,30 @@ def scan(root: str, rels, rules: dict) -> list:
     return hits
 
 
+def scan_suspect(root: str) -> list:
+    """形态特征扫描：按"长相"找可疑项，不依赖词表。
+
+    与词表复检互补——词表里没有的词，替换和词表复检会同时瞎；
+    形态扫描能在那种情况下兜住（实测抓到过词表漏掉的 AI 代号片段）。
+    结果供人工确认，**不阻断**（形态匹配必然有误报）。
+    """
+    out = []
+    for full, rel in walk_files(root, collect(root)[0]):
+        if not full.endswith(TEXT_EXT):
+            continue
+        try:
+            text = open(full, encoding="utf-8").read()
+        except (UnicodeDecodeError, OSError):
+            continue
+        for i, line in enumerate(text.splitlines(), 1):
+            for kind, pat in SUSPECT_PATTERNS.items():
+                m = pat.search(line)
+                if m and m.group(0) not in SUSPECT_ALLOW:
+                    out.append((rel, i, kind, m.group(0), line.strip()[:70]))
+                    break
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="生成待发布副本 publish/ 并统一脱敏")
     ap.add_argument("--check", action="store_true", help="只扫描本体，不生成")
@@ -237,8 +276,21 @@ def main() -> int:
         return 1
 
     n = sum(len(fs) for _r, _d, fs in os.walk(out))
-    print(f"\n脱敏复检：0 残留 ✅")
-    print(f"已生成 {out}（{n} 个文件）")
+    print(f"\n脱敏复检：0 残留 ✅（词表口径）")
+
+    suspect = scan_suspect(out)
+    if suspect:
+        print(f"\n[人工确认] 形态特征扫描命中 {len(suspect)} 处——词表盲区里的可疑项：")
+        for rel, ln, kind, tok, text in suspect[:20]:
+            print(f"  {kind}  {rel}:{ln}  「{tok}」  {text}")
+        if len(suspect) > 20:
+            print(f"  … 另有 {len(suspect) - 20} 处")
+        print("\n  逐条看过再发布：是泄漏就补进 .sensitive-patterns.json；"
+              "是正常内容就加进脚本的 SUSPECT_ALLOW。")
+    else:
+        print("形态特征扫描：无可疑项 ✅（词表盲区也没东西）")
+
+    print(f"\n已生成 {out}（{n} 个文件）")
     print(f"发布时只推这个目录：{', '.join(keep)}")
     print("提醒：对外建仓须在 publish/ 副本上全新 git init——不带本仓历史（历史提交含脱敏前信息，连带历史 push 即泄漏）")
     return 0

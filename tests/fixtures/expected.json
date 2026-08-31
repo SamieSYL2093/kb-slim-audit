@@ -6,11 +6,23 @@
     { "category": "头注堆叠", "location_contains": "single-line-header.md" },
     { "category": "孤儿文件", "location_contains": "hub.md" },
     { "category": "疑似复述", "location_contains": "copycat.md" },
-    { "category": "台账流水", "location_contains": "台账-流水.md" }
+    { "category": "台账流水", "location_contains": "台账-流水.md" },
+    { "category": "层级超标", "location_contains": "too/deep/nest" },
+    { "category": "命名不可扩展", "location_contains": "after" },
+    { "category": "层级超标", "location_contains": "strict/sub" },
+    { "category": "缺标准", "location_contains": "after" },
+    { "category": "缺标准", "location_contains": "codeproj" }
   ],
   "reject": [
     { "category": "孤儿文件", "location_contains": "note-alpha.md" },
     { "category": "孤儿文件", "location_contains": "note-beta.md" },
-    { "category": "台账流水", "location_contains": "台账-干净.md" }
+    { "category": "台账流水", "location_contains": "台账-干净.md" },
+    { "category": "层级超标", "location_contains": "declared" },
+    { "category": "缺标准", "location_contains": "declared" },
+    { "category": "缺标准", "location_contains": "too" },
+    { "category": "缺标准", "location_contains": "strict" },
+    { "category": "层级超标", "location_contains": "codeproj" },
+    { "category": "层级超标", "location_contains": "after" },
+    { "category": "命名不可扩展", "location_contains": "too" }
   ]
 }

@@ -1,0 +1,4 @@
+# 代码工程豁免样本依赖清单
+# 本文件的存在使 codeproj/ 被识别为代码项目根（requirements.txt 标记），
+# 其下的 src/components/deep/ 深度结构因此豁免 S11 层级超深检查。
+sample-dependency==1.0
